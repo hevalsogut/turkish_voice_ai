@@ -4,6 +4,7 @@ Per-clinic overrides (clinic.yaml `agent:` section) win over the global defaults
 """
 
 from livekit.plugins import deepgram, elevenlabs, openai
+from openai.types.realtime import AudioTranscription
 
 from voiceagent.clinic.models import AgentSettings
 from voiceagent.config import Settings
@@ -63,4 +64,35 @@ def build_tts(settings: Settings, agent: AgentSettings | None = None):
     kwargs = {"voice_id": voice} if voice else {}
     return elevenlabs.TTS(
         model=model, language="tr", api_key=settings.elevenlabs_api_key, **kwargs
+    )
+
+
+# Voices the Realtime API accepts (a subset of the TTS voices).
+REALTIME_VOICES = [v for v in OPENAI_VOICES if v not in ("fable", "nova", "onyx")]
+REALTIME_MODELS = ["gpt-realtime-2.1", "gpt-realtime-2.1-mini"]
+
+# Realtime has no separate voice-style parameter, so accent and pace are steered in the prompt.
+def realtime_prompt_suffix(agent_name: str) -> str:
+    return f"""
+
+# Ses ve dil
+Adın {agent_name}. Kendini tanıtırken yalnızca bu ismi kullan; başka bir isim söyleme.
+Her zaman Türkçe konuş; arayan başka dilde konuşmadıkça asla İngilizceye geçme. Aksansız, doğal İstanbul Türkçesiyle, sakin ve rahat bir telefon tempoyla konuş. Cümlelerin arasında kısa, doğal duraklamalar yap; spiker gibi okuma."""
+
+
+def engine_name(settings: Settings, agent: AgentSettings | None = None) -> str:
+    return (agent.engine if agent else "") or settings.engine
+
+
+def realtime_model_name(settings: Settings, agent: AgentSettings | None = None) -> str:
+    return (agent.realtime_model if agent else "") or settings.realtime_model
+
+
+def build_realtime(settings: Settings, agent: AgentSettings | None = None, model: str = ""):
+    voice = (agent.tts_voice_id if agent else "") or ""
+    return openai.realtime.RealtimeModel(
+        model=model or realtime_model_name(settings, agent),
+        voice=voice if voice in REALTIME_VOICES else "marin",
+        input_audio_transcription=AudioTranscription(model="gpt-4o-mini-transcribe", language="tr"),
+        api_key=settings.openai_api_key,
     )

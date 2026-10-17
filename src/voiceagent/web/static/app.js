@@ -82,6 +82,7 @@ const state = {
   callState: "idle", // idle | connecting | live
   chatId: crypto.randomUUID(),
   joinTimer: null,
+  engine: null,      // "classic" | "realtime:<model>", chosen on the Test call page
 };
 
 /* ---------- router ---------- */
@@ -106,7 +107,23 @@ function pageHeader(title, lede) {
   return [h("h1", {}, title), h("p", { class: "lede" }, lede)];
 }
 
+async function engineOptions() {
+  const [defaults, cfg] = await Promise.all([api("GET", "/api/defaults"), api("GET", "/api/config")]);
+  const options = [["classic", "Classic: Deepgram + GPT-4.1 + voice"],
+    ...defaults.realtime_models.map((m) => [`realtime:${m}`, `OpenAI Realtime: ${m}`])];
+  if (!state.engine) {
+    const e = cfg.agent.engine || defaults.engine;
+    state.engine = e === "realtime" ? `realtime:${cfg.agent.realtime_model || defaults.realtime_model}` : "classic";
+  }
+  return options;
+}
+
 async function renderTest() {
+  const engines = await engineOptions();
+  const engineSelect = h("select", { id: "engine", "aria-label": "Voice engine",
+    style: "width:auto", disabled: state.callState !== "idle",
+    onchange: (e) => { state.engine = e.target.value; } },
+    engines.map(([v, l]) => h("option", { value: v, selected: v === state.engine }, l)));
   const callBtn = h("button", { class: "callbtn", id: "callbtn", onclick: toggleCall },
     h("span", { class: "pulse" }), h("span", { id: "calllabel" }, "Start call"));
   const callState = h("span", { id: "callstate", class: "callstate" });
@@ -130,6 +147,7 @@ async function renderTest() {
         h("div", { class: "callbar" },
           h("div", { class: "segmented", role: "group", "aria-label": "Test mode" },
             modeBtn("voice", "Voice"), modeBtn("text", "Text")),
+          state.mode === "voice" ? engineSelect : null,
           state.mode === "voice" ? callBtn : null,
           state.mode === "voice" ? callState : null),
         h("div", { class: "transcript", id: "transcript", "aria-live": "polite" }),
@@ -158,6 +176,8 @@ function paintCall() {
   document.getElementById("calllabel").textContent =
     s === "idle" ? "Start call" : s === "connecting" ? "Connecting…" : "End call";
   const cs = document.getElementById("callstate");
+  const eng = document.getElementById("engine");
+  if (eng) eng.disabled = s !== "idle";
   cs.textContent = s === "live" ? "Live. Speak when the agent finishes greeting." : "";
   cs.classList.toggle("live", s === "live");
 }
@@ -217,7 +237,11 @@ function upsertTurn(id, who, text, interim) {
 
 function onAgentEvent(ev) {
   if (ev.type === "tool") { state.tools.push(ev); paintTools(); }
-  if (ev.type === "latency") {
+  if (ev.type === "latency" && ev.stage === "realtime") {
+    state.latency.push({ llm: ev.seconds, total: ev.seconds,
+      title: "Realtime: the model's time to first response. Excludes its wait for you to stop talking." });
+    paintLatency();
+  } else if (ev.type === "latency") {
     const key = { end_of_turn: "eot", llm: "llm", tts: "tts" }[ev.stage];
     state.pending[key] = ev.seconds;
     if (ev.stage === "tts") {
@@ -236,7 +260,9 @@ async function toggleCall() {
   state.turns = []; state.latency = []; state.tools = []; state.pending = {};
   state.callState = "connecting"; paintCall(); paintTranscript(); paintLatency(); paintTools();
   try {
-    const { url, token } = await api("POST", "/api/voice/token");
+    const [engine, model] = (state.engine || "classic").split(":");
+    const { url, token } = await api("POST", "/api/voice/token",
+      { engine, realtime_model: model || "" });
     const { Room, RoomEvent } = LivekitClient;
     const room = new Room();
     state.room = room;
@@ -460,7 +486,7 @@ async function renderAgent() {
   }
   paintOpenAI();
   const oaBox = h("div", {},
-    h("p", { class: "muted" }, "OpenAI's voices are built for English, so Turkish may carry an accent. The instructions below steer accent and tone. Preview costs a fraction of a cent."),
+    h("p", { class: "muted" }, "OpenAI's voices are built for English, so Turkish may carry an accent. The voice you select here is also used by the OpenAI Realtime engine (which has no fable, nova or onyx; it falls back to marin). The instructions below steer accent and tone for Classic only; Realtime gets its accent guidance from the prompt. Preview costs a fraction of a cent."),
     fieldWrap("Voice instructions", f.oa_instructions, "Written in English works best."),
     h("div", { style: "margin-top:12px" }, oaList));
 
@@ -482,7 +508,7 @@ async function renderAgent() {
       open_time: f.open_time.value, close_time: f.close_time.value,
       slot_minutes: Number(f.slot_minutes.value),
       departments: f.departments.value.split("\n").map((s) => s.trim()).filter(Boolean),
-      agent: { llm_model: f.llm_model.value, tts_provider: provider, tts_model: f.tts_model.value,
+      agent: { engine: f.engine.value, realtime_model: f.realtime_model.value, llm_model: f.llm_model.value, tts_provider: provider, tts_model: f.tts_model.value,
         tts_voice_id: provider === "openai" ? oaVoice : voiceId,
         tts_instructions: f.oa_instructions.value.trim() === defaults.tts_instructions ? "" : f.oa_instructions.value.trim(),
         greeting: f.greeting.value.trim(),
@@ -511,10 +537,13 @@ async function renderAgent() {
       fieldWrap("Opening line", f.greeting, "Spoken as-is at the start of every call. Leave empty for a natural greeting that matches the time of day."),
       h("div", { style: "margin-top:16px" },
         fieldWrap("Extra instructions", f.extra, "Written in your own words, any language. Added to the agent's rules."))),
-    h("div", { class: "panel" }, h("h2", {}, "Models"),
+    h("div", { class: "panel" }, h("h2", {}, "Engine and models"),
+      h("p", { class: "muted" }, "Classic chains speech-to-text, a language model and a voice, so each can be swapped or self-hosted later. OpenAI Realtime is one model that listens and speaks directly. You can also pick the engine per call on the Test call page."),
       h("div", { class: "grid2" },
-        fieldWrap("Language model", select("llm_model", LLM_MODELS, a.llm_model)),
-        fieldWrap("Voice model", select("tts_model", TTS_MODELS, a.tts_model)))),
+        fieldWrap("Default engine", select("engine", [["", "Default (from .env)"], ["classic", "Classic"], ["realtime", "OpenAI Realtime"]], a.engine)),
+        fieldWrap("Realtime model", select("realtime_model", [["", "Default (from .env)"], ...defaults.realtime_models.map((m) => [m, m])], a.realtime_model)),
+        fieldWrap("Language model (Classic)", select("llm_model", LLM_MODELS, a.llm_model)),
+        fieldWrap("Voice model (Classic, ElevenLabs)", select("tts_model", TTS_MODELS, a.tts_model)))),
     h("div", { class: "panel" }, h("h2", {}, "Voice"),
       h("div", { class: "segmented", role: "group", "aria-label": "Voice provider", style: "margin-bottom:12px" }, provBtns),
       elBox, oaBox),
@@ -587,7 +616,13 @@ async function renderCalls() {
         blocks.push(h("div", { class: "muted", style: "text-align:center" }, "Call ended"));
       }
     }
-    detail.replaceChildren(h("h2", {}, fmt(events[0].t)),
+    const sm = (calls.find((c) => c.id === id) || {}).summary || {};
+    const money = sm.usd == null ? "no verified price for this setup" : `about $${sm.usd.toFixed(3)}`;
+    const summaryLine = sm.engine ? h("p", { class: "muted" },
+      `${sm.engine === "realtime" ? "OpenAI Realtime" : "Classic"} (${sm.model}). ${sm.minutes} min. ` +
+      `Estimated model cost: ${money}` +
+      (sm.engine === "classic" && sm.tts_characters ? `, plus ${sm.tts_characters.toLocaleString()} voice characters billed by the voice provider.` : ".")) : null;
+    detail.replaceChildren(h("h2", {}, fmt(events[0].t)), summaryLine,
       h("div", { class: "transcript", style: "height:auto;max-height:68vh" }, blocks));
   }
 
@@ -595,7 +630,9 @@ async function renderCalls() {
     ? [h("p", { class: "muted" }, "No calls yet. Start one from Test call; it will appear here.")]
     : calls.map((c) => h("button", { class: "btn", style: "text-align:left", onclick: () => open(c.id) },
       h("strong", {}, fmt(c.started)), h("div", { class: "muted" },
-        `${c.messages} messages. ${c.preview ? "“" + c.preview.slice(0, 60) + "”" : ""}`)))));
+        `${(c.summary && c.summary.engine === "realtime") ? "Realtime" : "Classic"}. ${c.messages} messages.` +
+        (c.summary && c.summary.usd != null ? ` ~$${c.summary.usd.toFixed(3)}.` : "") +
+        (c.preview ? ` “${c.preview.slice(0, 50)}”` : ""))))));
   main().replaceChildren(
     ...pageHeader("Call history", "Every voice call, with what was said, what the agent did, and how fast it answered. Use it to find where the agent sounds off."),
     h("div", { class: "console", style: "grid-template-columns:minmax(260px,1fr) minmax(0,2fr)" }, list, detail));

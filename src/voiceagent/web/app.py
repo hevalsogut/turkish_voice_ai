@@ -15,8 +15,15 @@ from livekit import api as lk_api
 from livekit.agents import AgentSession
 from pydantic import BaseModel
 
+from voiceagent import pricing
 from voiceagent.agent.clinic_agent import ClinicAgent
-from voiceagent.agent.factory import DEFAULT_TTS_INSTRUCTIONS, OPENAI_VOICES, build_llm
+from voiceagent.agent.factory import (
+    DEFAULT_TTS_INSTRUCTIONS,
+    OPENAI_VOICES,
+    REALTIME_MODELS,
+    REALTIME_VOICES,
+    build_llm,
+)
 from voiceagent.clinic.handoff import JsonlNotifier
 from voiceagent.clinic.loader import load_clinic, save_clinic, save_knowledge
 from voiceagent.clinic.models import ClinicConfig
@@ -74,6 +81,10 @@ def get_defaults() -> dict:
         "style_guide": DEFAULT_STYLE_GUIDE,
         "tts_instructions": DEFAULT_TTS_INSTRUCTIONS,
         "openai_voices": OPENAI_VOICES,
+        "realtime_voices": REALTIME_VOICES,
+        "realtime_models": REALTIME_MODELS,
+        "engine": settings.engine,
+        "realtime_model": settings.realtime_model,
     }
 
 
@@ -145,6 +156,32 @@ def _read_call(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
 
 
+def _summarize(events: list[dict]) -> dict:
+    """Engine, duration and an estimated model cost for one call (None where no verified price)."""
+    start = next((e for e in events if e["kind"] == "start"), {})
+    minutes = 0.0
+    if len(events) > 1:
+        first = datetime.fromisoformat(events[0]["t"])
+        last = datetime.fromisoformat(events[-1]["t"])
+        minutes = (last - first).total_seconds() / 60
+    usage = [e for e in events if e["kind"] == "usage"]
+    engine = start.get("engine", "")
+    tts_chars = sum(e.get("characters") or 0 for e in usage if e.get("part") == "tts")
+    if engine == "realtime":
+        prices = [e.get("usd") for e in usage if e.get("part") == "realtime"]
+        usd = None if not prices or None in prices else sum(prices)
+    else:
+        llm = [e.get("usd") for e in usage if e.get("part") == "llm"]
+        usd = None if not llm or None in llm else sum(llm) + pricing.stt_cost(minutes * 60)
+    return {
+        "engine": engine,
+        "model": start.get("model", ""),
+        "minutes": round(minutes, 2),
+        "usd": None if usd is None else round(usd, 4),
+        "tts_characters": tts_chars,
+    }
+
+
 @app.get("/api/calls")
 def list_calls() -> list[dict]:
     directory = Path(settings.calls_dir)
@@ -161,6 +198,7 @@ def list_calls() -> list[dict]:
                 "messages": len(messages),
                 "preview": next((m["text"] for m in messages if m["role"] == "user"), ""),
                 "ended": any(e["kind"] == "end" for e in events),
+                "summary": _summarize(events) if events else {},
             }
         )
     return calls
@@ -318,12 +356,20 @@ async def usage() -> dict:
 # ---------- voice test: LiveKit token ----------
 
 
+class TokenBody(BaseModel):
+    engine: str = ""  # "classic" | "realtime"; empty = clinic default
+    realtime_model: str = ""
+
+
 @app.post("/api/voice/token")
-def voice_token() -> dict:
+def voice_token(body: TokenBody | None = None) -> dict:
+    body = body or TokenBody()
     room = f"test-{uuid.uuid4().hex[:8]}"
+    attributes = {k: v for k, v in body.model_dump().items() if v}
     token = (
         lk_api.AccessToken(settings.livekit_api_key, settings.livekit_api_secret)
         .with_identity(f"tester-{uuid.uuid4().hex[:6]}")
+        .with_attributes(attributes)
         .with_grants(lk_api.VideoGrants(room_join=True, room=room))
         .to_jwt()
     )

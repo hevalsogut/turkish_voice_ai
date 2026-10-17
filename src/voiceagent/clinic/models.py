@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field
 class AgentSettings(BaseModel):
     """Per-clinic agent behaviour. Empty values fall back to the global defaults in .env."""
 
+    engine: str = ""  # "classic" | "realtime"; empty = global default
+    realtime_model: str = ""
     llm_model: str = ""
     tts_provider: str = ""  # "elevenlabs" | "openai"; empty = global default
     tts_model: str = ""

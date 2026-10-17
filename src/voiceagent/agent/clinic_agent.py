@@ -39,6 +39,7 @@ class ClinicAgent(Agent):
         notifier: StaffNotifier,
         on_event: Callable[[dict], None] | None = None,
         on_hangup: Callable[[], None] | None = None,
+        prompt_suffix: str = "",
     ) -> None:
         self._on_hangup = on_hangup or (lambda: None)
         self._on_event = on_event or (lambda event: None)
@@ -48,6 +49,7 @@ class ClinicAgent(Agent):
         self._tz = ZoneInfo(config.timezone)
         super().__init__(
             instructions=build_system_prompt(config, knowledge, datetime.now(self._tz))
+            + prompt_suffix
         )
 
     @function_tool

@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     tts_provider: str = "elevenlabs"
     tts_model: str = "eleven_flash_v2_5"
     openai_tts_model: str = "gpt-4o-mini-tts"
+    engine: str = "classic"  # classic (STT + LLM + TTS) | realtime (one OpenAI speech model)
+    realtime_model: str = "gpt-realtime-2.1"
     tts_voice_id: str = ""
 
     clinic_dir: str = "data/clinics/demo"
