@@ -152,9 +152,12 @@ class ClinicAgent(Agent):
     ) -> str:
         """Çözemediğin veya personelin bilmesi gereken bir konuyu not alıp iletir.
 
+        Yalnızca arayanın adını ve numarasını aldıktan sonra çağır.
+
         Args:
             caller_phone: Arayanın geri dönüş numarası (rakamlar).
-            summary: Görüşmenin kısa özeti.
+            summary: Personelin tek bakışta anlayacağı net özet (kim, ne istiyor, hangi bölüm,
+                ne zaman müsait).
             unresolved: Çözülemeyen konu, personelden ne bekleniyor.
             caller_name: Arayanın adı, biliniyorsa.
             urgent: Acil bir durum varsa true.

@@ -535,7 +535,7 @@ async function renderCalls() {
           h("small", {}, e.role === "assistant" ? "Agent" : "Caller"), e.text));
       } else if (e.kind === "tool") {
         blocks.push(h("div", { class: "tool" }, h("strong", {}, e.name),
-          h("pre", {}, JSON.stringify(e.args)), h("pre", {}, "→ " + e.result)));
+          h("pre", {}, JSON.stringify(e.args)), h("pre", {}, e.result == null ? "(done)" : "→ " + e.result)));
       } else if (e.kind === "latency") {
         pending[e.stage] = e.seconds;
         if (e.stage === "tts") {
@@ -591,10 +591,10 @@ async function renderMessages() {
     ...pageHeader("Staff messages", "Things the agent could not resolve. Staff call these callers back."),
     msgs.length === 0
       ? h("p", { class: "muted" }, "Nothing to follow up. When a caller asks something outside the knowledge base, it lands here.")
-      : msgs.map((m) => h("article", { class: "msg" + (m.urgent ? " urgent" : "") },
+      : h("div", {}, msgs.map((m) => h("article", { class: "msg" + (m.urgent ? " urgent" : "") },
         h("h3", {}, m.caller_name || "Unknown caller", m.urgent ? h("span", { class: "tag" }, "Urgent") : null),
         h("div", {}, h("strong", {}, m.caller_phone), "  ", new Date(m.created_at).toLocaleString("tr-TR")),
-        h("p", {}, m.summary), h("p", { class: "muted" }, "Needs: " + m.unresolved))),
+        h("p", {}, m.summary), h("p", { class: "muted" }, "Needs: " + m.unresolved)))),
   );
 }
 
