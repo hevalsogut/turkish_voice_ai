@@ -1,5 +1,11 @@
 import asyncio
 import json
+import os
+import shutil
+import signal
+import subprocess
+import sys
+import time
 from pathlib import Path
 
 import typer
@@ -87,3 +93,58 @@ def make_manifest(
             )
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
     console.print(f"Wrote {len(lines)} samples -> {out}")
+
+
+@app.command("dev")
+def dev() -> None:
+    """Start everything for local testing: voice server, voice worker, and the dashboard."""
+    settings = get_settings()
+    if not shutil.which("livekit-server"):
+        console.print("[red]livekit-server not found. Install it with: brew install livekit[/red]")
+        raise typer.Exit(1)
+
+    log_dir = Path("data/logs")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    env = {
+        **os.environ,
+        "LIVEKIT_URL": settings.livekit_url,
+        "LIVEKIT_API_KEY": settings.livekit_api_key,
+        "LIVEKIT_API_SECRET": settings.livekit_api_secret,
+    }
+    commands = {
+        "livekit": ["livekit-server", "--dev", "--bind", "127.0.0.1"],
+        "worker": [sys.executable, "-m", "voiceagent.agent.main", "start"],
+        "web": [
+            sys.executable, "-m", "uvicorn", "voiceagent.web.app:app",
+            "--host", "127.0.0.1", "--port", str(settings.web_port),
+        ],
+    }
+    procs: dict[str, subprocess.Popen] = {}
+
+    def stop_all(*_: object) -> None:
+        for proc in procs.values():
+            if proc.poll() is None:
+                proc.terminate()
+
+    signal.signal(signal.SIGINT, stop_all)
+    signal.signal(signal.SIGTERM, stop_all)
+
+    for name, cmd in commands.items():
+        log = (log_dir / f"{name}.log").open("w")
+        procs[name] = subprocess.Popen(
+            cmd, env=env, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL
+        )
+        if name == "livekit":
+            time.sleep(1.5)  # the worker needs the server up to register
+
+    console.print(f"[green]Dashboard: http://127.0.0.1:{settings.web_port}[/green]")
+    console.print(f"Logs in {log_dir}/ . Press Ctrl+C to stop everything.")
+    try:
+        while all(p.poll() is None for p in procs.values()):
+            time.sleep(1)
+        dead = [n for n, p in procs.items() if p.poll() is not None]
+        console.print(f"[red]{', '.join(dead)} exited. See {log_dir}/{dead[0]}.log[/red]")
+    finally:
+        stop_all()
+        for proc in procs.values():
+            proc.wait(timeout=10)

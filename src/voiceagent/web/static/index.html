@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Voice Agent Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="shell">
+    <nav class="rail" aria-label="Main">
+      <div class="brand">Voice Agent<span>Console</span></div>
+      <ul id="nav">
+        <li><a href="#test" data-page="test">Test call</a></li>
+        <li><a href="#agent" data-page="agent">Agent settings</a></li>
+        <li><a href="#knowledge" data-page="knowledge">Knowledge base</a></li>
+        <li><a href="#appointments" data-page="appointments">Appointments</a></li>
+        <li><a href="#messages" data-page="messages">Staff messages <b id="msg-count" hidden></b></a></li>
+      </ul>
+      <div class="status" id="status" aria-live="polite"></div>
+    </nav>
+    <main id="main" tabindex="-1"></main>
+  </div>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="/vendor/livekit-client.umd.min.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

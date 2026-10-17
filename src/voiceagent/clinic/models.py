@@ -3,6 +3,16 @@ from datetime import date, datetime, time
 from pydantic import BaseModel, Field
 
 
+class AgentSettings(BaseModel):
+    """Per-clinic agent behaviour. Empty values fall back to the global defaults in .env."""
+
+    llm_model: str = ""
+    tts_model: str = ""
+    tts_voice_id: str = ""
+    greeting: str = ""
+    extra_instructions: str = ""
+
+
 class ClinicConfig(BaseModel):
     tenant_id: str
     name: str
@@ -15,6 +25,7 @@ class ClinicConfig(BaseModel):
     close_time: time = time(17, 0)
     slot_minutes: int = 30
     departments: list[str] = []
+    agent: AgentSettings = AgentSettings()
 
 
 class Appointment(BaseModel):
@@ -25,6 +36,7 @@ class Appointment(BaseModel):
     department: str
     start: datetime
     created_at: datetime
+    status: str = "confirmed"  # confirmed | cancelled
 
 
 class StaffMessage(BaseModel):

@@ -13,3 +13,5 @@ data/stt_bench/results/
 # Local call logs / handoffs contain personal data
 data/*.log
 data/handoffs.jsonl
+data/logs/
+data/*.db

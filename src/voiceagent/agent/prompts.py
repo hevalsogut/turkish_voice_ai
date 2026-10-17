@@ -61,10 +61,18 @@ Adres: {config.address}
 
 # Bilgi bankası
 {knowledge}
-"""
+{_extra(config)}"""
+
+
+def _extra(config: ClinicConfig) -> str:
+    text = config.agent.extra_instructions.strip()
+    return f"\n# Klinik yönetiminin ek talimatları\n{text}\n" if text else ""
 
 
 def greeting_instruction(config: ClinicConfig) -> str:
+    custom = config.agent.greeting.strip()
+    if custom:
+        return f"Arayanı aynen şu cümleyle karşıla: {custom}"
     return (
         f"Arayanı kısaca selamla: {config.name}, ben {config.agent_name}, nasıl yardımcı "
         "olabilirim? Tek cümle."

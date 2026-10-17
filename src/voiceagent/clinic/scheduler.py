@@ -1,4 +1,5 @@
 import uuid
+from collections.abc import Callable
 from datetime import date, datetime, timedelta
 from typing import Protocol
 
@@ -16,30 +17,39 @@ class AppointmentStore(Protocol):
         self, *, patient_name: str, patient_phone: str, department: str, start: datetime
     ) -> Appointment: ...
 
+    def list_appointments(self, *, include_cancelled: bool = False) -> list[Appointment]: ...
+
+    def cancel(self, appointment_id: str) -> bool: ...
+
+
+def generate_slots(config: ClinicConfig, day: date, now: datetime) -> list[datetime]:
+    """All bookable slot starts for a day (open hours, in the future)."""
+    if day.weekday() not in config.open_days:
+        return []
+    slots = []
+    cur = datetime.combine(day, config.open_time, tzinfo=now.tzinfo)
+    end = datetime.combine(day, config.close_time, tzinfo=now.tzinfo)
+    while cur < end:
+        if cur > now:
+            slots.append(cur)
+        cur += timedelta(minutes=config.slot_minutes)
+    return slots
+
 
 class InMemoryAppointmentStore:
-    """Demo store. Replaced by Postgres in a later phase behind the same protocol."""
+    """Used in tests. Production uses SqliteAppointmentStore behind the same protocol."""
 
-    def __init__(self, config: ClinicConfig, now: datetime) -> None:
+    def __init__(self, config: ClinicConfig, now: datetime | Callable[[], datetime]) -> None:
         self._config = config
-        self._now = now
+        self._clock = now if callable(now) else (lambda: now)
         self._booked: dict[tuple[str, datetime], Appointment] = {}
 
-    def _all_slots(self, day: date) -> list[datetime]:
-        cfg = self._config
-        if day.weekday() not in cfg.open_days:
-            return []
-        slots = []
-        cur = datetime.combine(day, cfg.open_time, tzinfo=self._now.tzinfo)
-        end = datetime.combine(day, cfg.close_time, tzinfo=self._now.tzinfo)
-        while cur < end:
-            if cur > self._now:
-                slots.append(cur)
-            cur += timedelta(minutes=cfg.slot_minutes)
-        return slots
-
     def free_slots(self, day: date, department: str) -> list[datetime]:
-        return [s for s in self._all_slots(day) if (department, s) not in self._booked]
+        return [
+            s
+            for s in generate_slots(self._config, day, self._clock())
+            if (department, s) not in self._booked
+        ]
 
     def book(
         self, *, patient_name: str, patient_phone: str, department: str, start: datetime
@@ -53,7 +63,17 @@ class InMemoryAppointmentStore:
             patient_phone=patient_phone,
             department=department,
             start=start,
-            created_at=self._now,
+            created_at=self._clock(),
         )
         self._booked[(department, start)] = appt
         return appt
+
+    def list_appointments(self, *, include_cancelled: bool = False) -> list[Appointment]:
+        return sorted(self._booked.values(), key=lambda a: a.start)
+
+    def cancel(self, appointment_id: str) -> bool:
+        for key, appt in list(self._booked.items()):
+            if appt.id == appointment_id:
+                del self._booked[key]
+                return True
+        return False

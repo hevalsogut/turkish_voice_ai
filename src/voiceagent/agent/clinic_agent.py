@@ -1,3 +1,6 @@
+import functools
+import inspect
+from collections.abc import Callable
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -10,6 +13,22 @@ from voiceagent.clinic.phone import normalize_phone, phone_to_speech
 from voiceagent.clinic.scheduler import AppointmentStore, SlotUnavailableError
 
 
+def reported(fn):
+    """Report every tool call (name, arguments, result) to the dashboard's live view."""
+    sig = inspect.signature(fn)
+
+    @functools.wraps(fn)
+    async def wrapper(self, context, *args, **kwargs):
+        result = await fn(self, context, *args, **kwargs)
+        bound = sig.bind(self, context, *args, **kwargs)
+        bound.apply_defaults()
+        call_args = {k: v for k, v in bound.arguments.items() if k not in ("self", "context")}
+        self._on_event({"type": "tool", "name": fn.__name__, "args": call_args, "result": result})
+        return result
+
+    return wrapper
+
+
 class ClinicAgent(Agent):
     def __init__(
         self,
@@ -18,7 +37,9 @@ class ClinicAgent(Agent):
         knowledge: str,
         store: AppointmentStore,
         notifier: StaffNotifier,
+        on_event: Callable[[dict], None] | None = None,
     ) -> None:
+        self._on_event = on_event or (lambda event: None)
         self._config = config
         self._store = store
         self._notifier = notifier
@@ -28,6 +49,7 @@ class ClinicAgent(Agent):
         )
 
     @function_tool
+    @reported
     async def check_availability(self, context: RunContext, date: str, department: str) -> str:
         """Bir gün ve bölüm için boş randevu saatlerini döndürür.
 
@@ -50,6 +72,7 @@ class ClinicAgent(Agent):
         return "Boş saatler: " + ", ".join(f"{s:%H:%M}" for s in slots)
 
     @function_tool
+    @reported
     async def book_appointment(
         self,
         context: RunContext,
@@ -87,6 +110,7 @@ class ClinicAgent(Agent):
         return f"Randevu oluşturuldu: {appt.department}, {appt.start:%Y-%m-%d %H:%M}, no {appt.id}."
 
     @function_tool
+    @reported
     async def confirm_phone(self, context: RunContext, phone: str) -> str:
         """Arayanın söylediği telefon numarasını doğrular ve sesli okunuşunu verir.
 
@@ -105,6 +129,7 @@ class ClinicAgent(Agent):
         )
 
     @function_tool
+    @reported
     async def end_call(self, context: RunContext) -> str:
         """Görüşmeyi bitirir. Arayan başka bir isteği olmadığını söylediğinde,
         önce veda cümleni söyle, sonra bu aracı çağır."""
@@ -113,6 +138,7 @@ class ClinicAgent(Agent):
         return "Görüşme sonlandırıldı."
 
     @function_tool
+    @reported
     async def take_message(
         self,
         context: RunContext,

@@ -3,13 +3,24 @@ name: Örnek Sağlık Kliniği
 agent_name: Elif
 timezone: Europe/Istanbul
 address: Atatürk Caddesi No 12, Kadıköy, İstanbul
-phone_for_staff: ""
-open_days: [0, 1, 2, 3, 4]
-open_time: "09:00"
-close_time: "17:00"
+phone_for_staff: ''
+open_days:
+- 0
+- 1
+- 2
+- 3
+- 4
+open_time: 09:00:00
+close_time: '17:00:00'
 slot_minutes: 30
 departments:
-  - Dahiliye
-  - Kardiyoloji
-  - Göz Hastalıkları
-  - Diş
+- Dahiliye
+- Kardiyoloji
+- Göz Hastalıkları
+- Diş
+agent:
+  llm_model: ''
+  tts_model: ''
+  tts_voice_id: ''
+  greeting: ''
+  extra_instructions: ''

@@ -46,3 +46,16 @@ python -m voiceagent.agent.main console   # speak through your Mac's mic and spe
   plus ~0.3-0.5s end-of-turn detection. Per-turn timings are logged as `LATENCY ...`.
 - `gpt-4o-mini` booked the wrong slot in testing, hence the `gpt-4.1-mini` default.
 - Console logs (`data/console.log`) contain call transcripts and are git-ignored.
+
+## Dashboard (configure + test)
+
+```bash
+voiceagent dev        # starts the voice server, the voice worker and the dashboard
+# open http://127.0.0.1:8000
+```
+
+Needs `brew install livekit` once (local real-time media server). Pages: Test call (voice in the
+browser, or text), Agent settings (clinic, voice, models, extra instructions), Knowledge base
+(editable Markdown), Appointments, Staff messages. Edits apply to the next call.
+The dashboard has no login and binds to 127.0.0.1 only: never expose it publicly as is.
+Logs: `data/logs/`.

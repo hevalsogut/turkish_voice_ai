@@ -20,6 +20,14 @@ class Settings(BaseSettings):
 
     clinic_dir: str = "data/clinics/demo"
     handoff_path: str = "data/handoffs.jsonl"
+    db_path: str = "data/app.db"
+
+    # Local LiveKit server (`livekit-server --dev`) defaults; override for LiveKit Cloud
+    livekit_url: str = "ws://127.0.0.1:7880"
+    livekit_api_key: str = "devkey"
+    livekit_api_secret: str = "secret"
+    web_port: int = 8000
+    worker_port: int = 8091  # the voice worker's internal health server
 
 
 def get_settings() -> Settings:
