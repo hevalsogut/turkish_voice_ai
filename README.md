@@ -30,3 +30,16 @@ Goal: pick the STT provider with real phone-quality Turkish audio, not clean mic
 
 Output: WER / CER / p50 latency per provider; per-clip detail in `data/stt_bench/results/latest.jsonl`.
 Read the per-clip file too: names, numbers, and dates matter most for appointments.
+
+## Phase 1: talk to the clinic agent
+
+```bash
+python -m voiceagent.agent.main console   # speak through your Mac's mic and speakers
+```
+
+- Clinic data lives in `data/clinics/demo/` (`clinic.yaml` for hours/departments, `knowledge.md` for FAQs).
+- Bookings are in memory for now (lost on restart). Staff handoffs are appended to `data/handoffs.jsonl`.
+- Swap vendors in `.env` (`STT_PROVIDER`, `LLM_MODEL`, `TTS_MODEL`, `TTS_VOICE_ID`); only
+  `src/voiceagent/agent/factory.py` names vendors.
+- Known weak spots to tune: spoken phone numbers, `gpt-4o-mini` picked the wrong slot in testing
+  (hence the `gpt-4.1-mini` default), turn-taking/barge-in not yet tuned.
