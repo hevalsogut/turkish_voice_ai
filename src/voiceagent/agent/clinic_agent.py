@@ -6,6 +6,7 @@ from livekit.agents import Agent, RunContext, function_tool
 from voiceagent.agent.prompts import build_system_prompt
 from voiceagent.clinic.handoff import StaffNotifier
 from voiceagent.clinic.models import ClinicConfig, StaffMessage
+from voiceagent.clinic.phone import normalize_phone, phone_to_speech
 from voiceagent.clinic.scheduler import AppointmentStore, SlotUnavailableError
 
 
@@ -67,6 +68,9 @@ class ClinicAgent(Agent):
             date: Gün, YYYY-MM-DD biçiminde.
             time: Saat, HH:MM biçiminde.
         """
+        phone = normalize_phone(patient_phone)
+        if phone is None:
+            return "Telefon numarası geçersiz. Arayandan numarayı baştan iste."
         try:
             start = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M").replace(tzinfo=self._tz)
         except ValueError:
@@ -74,13 +78,39 @@ class ClinicAgent(Agent):
         try:
             appt = self._store.book(
                 patient_name=patient_name,
-                patient_phone=patient_phone,
+                patient_phone=phone,
                 department=department,
                 start=start,
             )
         except SlotUnavailableError:
             return "Bu saat dolu veya geçersiz. Başka bir saat öner."
         return f"Randevu oluşturuldu: {appt.department}, {appt.start:%Y-%m-%d %H:%M}, no {appt.id}."
+
+    @function_tool
+    async def confirm_phone(self, context: RunContext, phone: str) -> str:
+        """Arayanın söylediği telefon numarasını doğrular ve sesli okunuşunu verir.
+
+        Numarayı arayandan aldıktan hemen sonra çağır. Dönen okunuşu aynen oku, kendin rakam
+        okumaya çalışma.
+
+        Args:
+            phone: Arayanın söylediği numara, rakamlara çevrilmiş (örn. 05540219870).
+        """
+        normalized = normalize_phone(phone)
+        if normalized is None:
+            return "Numara geçersiz veya eksik. Arayandan numarayı baştan, yavaşça iste."
+        return (
+            "Geçerli. Arayana yalnızca şu okunuşu aynen oku ve doğru mu diye sor, başka rakam "
+            f"söyleme: {phone_to_speech(normalized)}"
+        )
+
+    @function_tool
+    async def end_call(self, context: RunContext) -> str:
+        """Görüşmeyi bitirir. Arayan başka bir isteği olmadığını söylediğinde,
+        önce veda cümleni söyle, sonra bu aracı çağır."""
+        await context.wait_for_playout()
+        context.session.shutdown(drain=True)
+        return "Görüşme sonlandırıldı."
 
     @function_tool
     async def take_message(
@@ -95,17 +125,20 @@ class ClinicAgent(Agent):
         """Çözemediğin veya personelin bilmesi gereken bir konuyu not alıp iletir.
 
         Args:
-            caller_phone: Arayanın geri dönüş numarası.
+            caller_phone: Arayanın geri dönüş numarası (rakamlar).
             summary: Görüşmenin kısa özeti.
             unresolved: Çözülemeyen konu, personelden ne bekleniyor.
             caller_name: Arayanın adı, biliniyorsa.
             urgent: Acil bir durum varsa true.
         """
+        phone = normalize_phone(caller_phone)
+        if phone is None:
+            return "Telefon numarası geçersiz. Arayandan numarayı baştan iste."
         await self._notifier.notify(
             StaffMessage(
                 tenant_id=self._config.tenant_id,
                 caller_name=caller_name,
-                caller_phone=caller_phone,
+                caller_phone=phone,
                 summary=summary,
                 unresolved=unresolved,
                 urgent=urgent,

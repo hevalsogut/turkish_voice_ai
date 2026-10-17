@@ -41,5 +41,8 @@ python -m voiceagent.agent.main console   # speak through your Mac's mic and spe
 - Bookings are in memory for now (lost on restart). Staff handoffs are appended to `data/handoffs.jsonl`.
 - Swap vendors in `.env` (`STT_PROVIDER`, `LLM_MODEL`, `TTS_MODEL`, `TTS_VOICE_ID`); only
   `src/voiceagent/agent/factory.py` names vendors.
-- Known weak spots to tune: spoken phone numbers, `gpt-4o-mini` picked the wrong slot in testing
-  (hence the `gpt-4.1-mini` default), turn-taking/barge-in not yet tuned.
+- Phone numbers are validated and read back by code (`clinic/phone.py`), never by the LLM.
+- Latency (measured from this machine): ElevenLabs flash first audio ~0.26s, LLM first token ~0.6s,
+  plus ~0.3-0.5s end-of-turn detection. Per-turn timings are logged as `LATENCY ...`.
+- `gpt-4o-mini` booked the wrong slot in testing, hence the `gpt-4.1-mini` default.
+- Console logs (`data/console.log`) contain call transcripts and are git-ignored.

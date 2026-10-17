@@ -9,3 +9,7 @@ data/stt_bench/clips/*
 data/stt_bench/results/
 !data/stt_bench/clips/.gitkeep
 .DS_Store
+
+# Local call logs / handoffs contain personal data
+data/*.log
+data/handoffs.jsonl
