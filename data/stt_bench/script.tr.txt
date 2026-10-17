@@ -1,0 +1,20 @@
+01|Merhaba, yarın için bir randevu almak istiyorum.
+02|Diş hekimine gitmem gerekiyor, en yakın boş saat ne zaman?
+03|Adım Ayşe Yılmaz, telefon numaram sıfır beş yüz otuz iki, yüz yirmi üç, kırk beş, altmış yedi.
+04|Perşembe günü öğleden sonra üç buçuk uygun mu?
+05|Randevumu cumartesiye ertelemek istiyorum.
+06|Muayene ücreti ne kadar, sigorta geçiyor mu?
+07|Kardiyoloji bölümünden doktor Mehmet Öztürk'e görünmek istiyorum.
+08|Kliniğiniz hafta sonu açık mı?
+09|Çocuğum için göz muayenesi randevusu almak istiyorum, yedi yaşında.
+10|Randevumu iptal etmek istiyorum, on beş Kasım saat on bir.
+11|Adresiniz neresi, otopark var mı?
+12|Kan tahlili için aç gelmem gerekiyor mu?
+13|Doktor bey bugün hangi saatlerde müsait?
+14|Şu an çok ağrım var, acil bir durum olabilir mi?
+15|Ağustosun yirmi üçünde sabah dokuzda bir kontrol randevusu istiyorum.
+16|Sonuçlarım ne zaman çıkar, e-posta ile gönderebilir misiniz?
+17|Özür dilerim, sizi tam duyamadım, tekrar eder misiniz?
+18|İsmim Çağlar Şahin, soyadım Ş, A, H, İ, N şeklinde yazılıyor.
+19|Pazartesi veya salı günü, hangisi daha uygunsa onu yazın.
+20|Teşekkür ederim, iyi günler dilerim.

@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+data/stt_bench/clips/*
+data/stt_bench/results/
+!data/stt_bench/clips/.gitkeep
+.DS_Store
