@@ -15,7 +15,9 @@ class Settings(BaseSettings):
     # Live agent: which vendor/model each stage uses (swap here, not in agent code)
     stt_provider: str = "deepgram"
     llm_model: str = "gpt-4.1"
+    tts_provider: str = "elevenlabs"
     tts_model: str = "eleven_flash_v2_5"
+    openai_tts_model: str = "gpt-4o-mini-tts"
     tts_voice_id: str = ""
 
     clinic_dir: str = "data/clinics/demo"

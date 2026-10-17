@@ -346,7 +346,11 @@ async function renderAgent() {
   f.style = h("textarea", { rows: 16, spellcheck: "false" });
   f.style.value = a.style_guide || defaults.style_guide;
   f.extra = h("textarea", { rows: 6, placeholder: "Example: Never quote prices over the phone. Always offer the earliest available slot first." }, a.extra_instructions);
-  let voiceId = a.tts_voice_id;
+  let provider = a.tts_provider || "elevenlabs";
+  let voiceId = provider === "elevenlabs" ? a.tts_voice_id : "";  // ElevenLabs voice id
+  let oaVoice = provider === "openai" && a.tts_voice_id ? a.tts_voice_id : "marin";  // OpenAI voice name
+  f.oa_instructions = h("textarea", { rows: 4 });
+  f.oa_instructions.value = a.tts_instructions || defaults.tts_instructions;
 
   const voiceBox = h("div", { class: "voices" }, h("p", { class: "muted" }, "Loading voices…"));
   const voiceSearch = h("input", { type: "text", placeholder: "Search voices", "aria-label": "Search voices" });
@@ -432,6 +436,43 @@ async function renderAgent() {
   api("GET", "/api/voices").then((v) => { allVoices = v; paintVoices(); })
     .catch((e) => voiceBox.replaceChildren(h("p", { class: "muted" }, "Could not load voices: " + e.message)));
 
+  const elBox = h("div", {},
+    usageLine,
+    h("div", { class: "segmented", role: "group", "aria-label": "Voice source" }, tabMine, tabLib),
+    h("p", { class: "muted", style: "margin:10px 0 0" },
+      "Native Turkish voices sound far better than the English presets. Listening in the library is free; Preview on your own voices costs about 70 characters."),
+    voiceSearch, voiceBox, libBox);
+
+  // OpenAI voices: fixed list, steered with written instructions
+  const oaList = h("div", { class: "voices" });
+  function paintOpenAI() {
+    oaList.replaceChildren(...defaults.openai_voices.map((name) => h("label", { class: "voice" + (oaVoice === name ? " selected" : "") },
+      h("input", { type: "radio", name: "oavoice", checked: oaVoice === name, onchange: () => { oaVoice = name; paintOpenAI(); } }),
+      h("div", {}, h("strong", {}, name), h("div", { class: "meta" }, name === "marin" || name === "cedar" ? "Recommended by OpenAI for best quality" : "")),
+      h("button", { class: "btn small", type: "button", onclick: async (e) => {
+        e.preventDefault(); e.target.disabled = true;
+        try {
+          const res = await api("POST", "/api/voices/preview", { voice_id: name, provider: "openai", instructions: f.oa_instructions.value });
+          await play(URL.createObjectURL(await res.blob()));
+        } catch (err) { fail(err); }
+        e.target.disabled = false;
+      } }, "Preview"))));
+  }
+  paintOpenAI();
+  const oaBox = h("div", {},
+    h("p", { class: "muted" }, "OpenAI's voices are built for English, so Turkish may carry an accent. The instructions below steer accent and tone. Preview costs a fraction of a cent."),
+    fieldWrap("Voice instructions", f.oa_instructions, "Written in English works best."),
+    h("div", { style: "margin-top:12px" }, oaList));
+
+  const provBtns = ["elevenlabs", "openai"].map((id) => h("button", { type: "button",
+    onclick: () => { provider = id; syncProvider(); } }, id === "elevenlabs" ? "ElevenLabs" : "OpenAI"));
+  function syncProvider() {
+    provBtns.forEach((b, i) => b.setAttribute("aria-pressed", String(["elevenlabs", "openai"][i] === provider)));
+    elBox.hidden = provider !== "elevenlabs";
+    oaBox.hidden = provider !== "openai";
+  }
+  syncProvider();
+
   const save = async () => {
     const body = {
       ...cfg,
@@ -441,7 +482,9 @@ async function renderAgent() {
       open_time: f.open_time.value, close_time: f.close_time.value,
       slot_minutes: Number(f.slot_minutes.value),
       departments: f.departments.value.split("\n").map((s) => s.trim()).filter(Boolean),
-      agent: { llm_model: f.llm_model.value, tts_model: f.tts_model.value, tts_voice_id: voiceId,
+      agent: { llm_model: f.llm_model.value, tts_provider: provider, tts_model: f.tts_model.value,
+        tts_voice_id: provider === "openai" ? oaVoice : voiceId,
+        tts_instructions: f.oa_instructions.value.trim() === defaults.tts_instructions ? "" : f.oa_instructions.value.trim(),
         greeting: f.greeting.value.trim(),
         style_guide: f.style.value.trim() === defaults.style_guide.trim() ? "" : f.style.value.trim(),
         extra_instructions: f.extra.value.trim() },
@@ -473,11 +516,8 @@ async function renderAgent() {
         fieldWrap("Language model", select("llm_model", LLM_MODELS, a.llm_model)),
         fieldWrap("Voice model", select("tts_model", TTS_MODELS, a.tts_model)))),
     h("div", { class: "panel" }, h("h2", {}, "Voice"),
-      usageLine,
-      h("div", { class: "segmented", role: "group", "aria-label": "Voice source" }, tabMine, tabLib),
-      h("p", { class: "muted", style: "margin:10px 0 0" },
-        "Native Turkish voices sound far better than the English presets. Listening in the library is free; Preview on your own voices costs about 70 characters."),
-      voiceSearch, voiceBox, libBox),
+      h("div", { class: "segmented", role: "group", "aria-label": "Voice provider", style: "margin-bottom:12px" }, provBtns),
+      elBox, oaBox),
     h("div", { class: "actions" }, h("button", { class: "btn primary", onclick: save }, "Save changes")),
   );
 }

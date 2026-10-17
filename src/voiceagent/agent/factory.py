@@ -29,8 +29,36 @@ def build_llm(settings: Settings, agent: AgentSettings | None = None):
     return openai.LLM(model=model, api_key=settings.openai_api_key)
 
 
+# OpenAI's voices are English-optimised; this steers gpt-4o-mini-tts toward natural Turkish.
+DEFAULT_TTS_INSTRUCTIONS = (
+    "Speak natural, native Istanbul Turkish with no foreign accent. You are a warm, calm "
+    "and professional clinic receptionist on the phone. Conversational pace with short "
+    "natural pauses, never an announcer or audiobook reading tone."
+)
+OPENAI_VOICES = [
+    "marin", "cedar", "coral", "sage", "ballad", "verse", "alloy", "ash", "echo", "fable",
+    "nova", "onyx", "shimmer",
+]
+
+
+def tts_provider_name(settings: Settings, agent: AgentSettings | None = None) -> str:
+    return (agent.tts_provider if agent else "") or settings.tts_provider
+
+
 def build_tts(settings: Settings, agent: AgentSettings | None = None):
-    voice = (agent.tts_voice_id if agent else "") or settings.tts_voice_id
+    provider = tts_provider_name(settings, agent)
+    voice = (agent.tts_voice_id if agent else "") or ""
+    if provider == "openai":
+        instructions = (agent.tts_instructions if agent else "").strip() or DEFAULT_TTS_INSTRUCTIONS
+        return openai.TTS(
+            model=settings.openai_tts_model,
+            voice=voice if voice in OPENAI_VOICES else "marin",
+            instructions=instructions,
+            api_key=settings.openai_api_key,
+        )
+    if provider != "elevenlabs":
+        raise ValueError(f"Unsupported tts_provider: {provider}")
+    voice = voice or settings.tts_voice_id
     model = (agent.tts_model if agent else "") or settings.tts_model
     kwargs = {"voice_id": voice} if voice else {}
     return elevenlabs.TTS(

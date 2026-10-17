@@ -16,7 +16,7 @@ from livekit.agents import AgentSession
 from pydantic import BaseModel
 
 from voiceagent.agent.clinic_agent import ClinicAgent
-from voiceagent.agent.factory import build_llm
+from voiceagent.agent.factory import DEFAULT_TTS_INSTRUCTIONS, OPENAI_VOICES, build_llm
 from voiceagent.clinic.handoff import JsonlNotifier
 from voiceagent.clinic.loader import load_clinic, save_clinic, save_knowledge
 from voiceagent.clinic.models import ClinicConfig
@@ -70,7 +70,11 @@ async def health() -> dict:
 def get_defaults() -> dict:
     from voiceagent.agent.prompts import DEFAULT_STYLE_GUIDE
 
-    return {"style_guide": DEFAULT_STYLE_GUIDE}
+    return {
+        "style_guide": DEFAULT_STYLE_GUIDE,
+        "tts_instructions": DEFAULT_TTS_INSTRUCTIONS,
+        "openai_voices": OPENAI_VOICES,
+    }
 
 
 @app.get("/api/config")
@@ -202,14 +206,32 @@ async def voices() -> list[dict]:
 
 class PreviewBody(BaseModel):
     voice_id: str
+    provider: str = "elevenlabs"
     model: str = ""
     text: str = ""
+    instructions: str = ""
 
 
 @app.post("/api/voices/preview")
 async def voice_preview(body: PreviewBody) -> Response:
     config, _ = load_clinic(CLINIC_DIR)
     text = body.text or f"Merhaba, ben {config.agent_name}. Size nasıl yardımcı olabilirim?"
+    if body.provider == "openai":
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                "https://api.openai.com/v1/audio/speech",
+                headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+                json={
+                    "model": settings.openai_tts_model,
+                    "voice": body.voice_id,
+                    "input": text,
+                    "instructions": body.instructions.strip() or DEFAULT_TTS_INSTRUCTIONS,
+                    "response_format": "mp3",
+                },
+            )
+        if resp.status_code != 200:
+            raise HTTPException(502, f"OpenAI error {resp.status_code}: {resp.text[:200]}")
+        return Response(resp.content, media_type="audio/mpeg")
     model = body.model or config.agent.tts_model or settings.tts_model
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(

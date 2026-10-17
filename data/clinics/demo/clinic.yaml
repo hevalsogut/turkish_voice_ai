@@ -1,6 +1,6 @@
 tenant_id: demo
 name: Örnek Sağlık Kliniği
-agent_name: Elif
+agent_name: Murat
 timezone: Europe/Istanbul
 address: Atatürk Caddesi No 12, Kadıköy, İstanbul
 phone_for_staff: ''
@@ -21,6 +21,7 @@ departments:
 agent:
   llm_model: ''
   tts_model: ''
-  tts_voice_id: EXAVITQu4vr4xnSDxMaL
+  tts_voice_id: pqHfZKP75CvOlQylNhV4
   greeting: ''
+  style_guide: ''
   extra_instructions: ''

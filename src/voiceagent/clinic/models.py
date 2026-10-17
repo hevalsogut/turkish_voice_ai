@@ -7,8 +7,10 @@ class AgentSettings(BaseModel):
     """Per-clinic agent behaviour. Empty values fall back to the global defaults in .env."""
 
     llm_model: str = ""
+    tts_provider: str = ""  # "elevenlabs" | "openai"; empty = global default
     tts_model: str = ""
-    tts_voice_id: str = ""
+    tts_voice_id: str = ""  # ElevenLabs voice id, or an OpenAI voice name such as "marin"
+    tts_instructions: str = ""  # OpenAI only: steers accent, tone and pace
     greeting: str = ""
     style_guide: str = ""  # empty = built-in default (see agent/prompts.py)
     extra_instructions: str = ""
