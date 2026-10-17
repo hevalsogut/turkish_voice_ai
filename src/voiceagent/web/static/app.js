@@ -86,7 +86,7 @@ const state = {
 
 /* ---------- router ---------- */
 
-const pages = { test: renderTest, agent: renderAgent, knowledge: renderKnowledge,
+const pages = { test: renderTest, calls: renderCalls, agent: renderAgent, knowledge: renderKnowledge,
   appointments: renderAppointments, messages: renderMessages };
 
 function route() {
@@ -325,7 +325,7 @@ const TTS_MODELS = [["", "Default (from .env)"], ["eleven_flash_v2_5", "Flash v2
   ["eleven_turbo_v2_5", "Turbo v2.5"], ["eleven_multilingual_v2", "Multilingual v2 (best quality, slower)"]];
 
 async function renderAgent() {
-  const cfg = await api("GET", "/api/config");
+  const [cfg, defaults] = await Promise.all([api("GET", "/api/config"), api("GET", "/api/defaults")]);
   const a = cfg.agent;
   const f = {};
   const text = (key, label, value, hint) => (f[key] = h("input", { type: "text", value })) && fieldWrap(label, f[key], hint);
@@ -342,7 +342,9 @@ async function renderAgent() {
   f.close_time = h("input", { type: "time", value: cfg.close_time.slice(0, 5) });
   f.slot_minutes = h("input", { type: "number", min: 10, max: 120, step: 5, value: cfg.slot_minutes });
   f.departments = h("textarea", { rows: 4 }, cfg.departments.join("\n"));
-  f.greeting = h("input", { type: "text", value: a.greeting, placeholder: "Leave empty to let the agent greet naturally" });
+  f.greeting = h("input", { type: "text", value: a.greeting, placeholder: "Leave empty for a natural greeting" });
+  f.style = h("textarea", { rows: 16, spellcheck: "false" });
+  f.style.value = a.style_guide || defaults.style_guide;
   f.extra = h("textarea", { rows: 6, placeholder: "Example: Never quote prices over the phone. Always offer the earliest available slot first." }, a.extra_instructions);
   let voiceId = a.tts_voice_id;
 
@@ -440,7 +442,9 @@ async function renderAgent() {
       slot_minutes: Number(f.slot_minutes.value),
       departments: f.departments.value.split("\n").map((s) => s.trim()).filter(Boolean),
       agent: { llm_model: f.llm_model.value, tts_model: f.tts_model.value, tts_voice_id: voiceId,
-        greeting: f.greeting.value.trim(), extra_instructions: f.extra.value.trim() },
+        greeting: f.greeting.value.trim(),
+        style_guide: f.style.value.trim() === defaults.style_guide.trim() ? "" : f.style.value.trim(),
+        extra_instructions: f.extra.value.trim() },
     };
     try { await api("PUT", "/api/config", body); toast("Saved. Applies to the next call."); } catch (e) { fail(e); }
   };
@@ -456,8 +460,12 @@ async function renderAgent() {
         fieldWrap("Opens", f.open_time), fieldWrap("Closes", f.close_time),
         fieldWrap("Appointment length (minutes)", f.slot_minutes),
         fieldWrap("Departments", f.departments, "One per line. Callers book into these."))),
+    h("div", { class: "panel" }, h("h2", {}, "Speaking style"),
+      h("p", { class: "muted" }, "Who the agent is and how it talks, in Turkish. The examples of good and bad replies shape the tone more than anything else. {agent_name} is replaced by the name above."),
+      f.style,
+      h("div", { class: "actions" }, h("button", { class: "btn small", type: "button", onclick: () => { f.style.value = defaults.style_guide; toast("Default style restored. Save to keep it."); } }, "Restore default style"))),
     h("div", { class: "panel" }, h("h2", {}, "Behaviour"),
-      fieldWrap("Opening line", f.greeting, "Spoken as-is at the start of every call."),
+      fieldWrap("Opening line", f.greeting, "Spoken as-is at the start of every call. Leave empty for a natural greeting that matches the time of day."),
       h("div", { style: "margin-top:16px" },
         fieldWrap("Extra instructions", f.extra, "Written in your own words, any language. Added to the agent's rules."))),
     h("div", { class: "panel" }, h("h2", {}, "Models"),
@@ -499,11 +507,58 @@ async function renderKnowledge() {
   main().replaceChildren(
     ...pageHeader("Knowledge base",
       "Everything the agent may tell callers: hours, prices, preparation instructions, policies. Plain Markdown, written in Turkish. If it isn't here, the agent takes a message instead of guessing."),
+    h("div", { class: "panel" }, h("h2", {}, "Writing it well"),
+      h("p", { class: "muted", style: "margin:0" },
+        "Write facts, not instructions: one short section per topic, with the answer in the first line. Put numbers, prices and hours exactly as the agent should say them. For anything the agent should never answer, say so under a heading like “Personele yönlendir”. How the agent talks is set in Agent settings, not here.")),
     h("div", { class: "panel editor" }, area,
       h("div", { class: "actions" },
         h("button", { class: "btn primary", onclick: save }, "Save changes"), counter, dirty)),
   );
   update();
+}
+
+/* ---------- call history ---------- */
+
+async function renderCalls() {
+  const calls = await api("GET", "/api/calls");
+  const detail = h("div", { class: "panel", style: "margin:0" }, h("p", { class: "muted" }, "Select a call to read it."));
+  const list = h("div", { class: "lat-list", style: "max-height:70vh" });
+  const fmt = (iso) => new Date(iso).toLocaleString("tr-TR", { dateStyle: "medium", timeStyle: "short" });
+
+  async function open(id) {
+    const events = await api("GET", `/api/calls/${encodeURIComponent(id)}`);
+    const blocks = [];
+    let pending = {};
+    for (const e of events) {
+      if (e.kind === "message") {
+        blocks.push(h("div", { class: `turn ${e.role === "assistant" ? "agent" : "caller"}` },
+          h("small", {}, e.role === "assistant" ? "Agent" : "Caller"), e.text));
+      } else if (e.kind === "tool") {
+        blocks.push(h("div", { class: "tool" }, h("strong", {}, e.name),
+          h("pre", {}, JSON.stringify(e.args)), h("pre", {}, "→ " + e.result)));
+      } else if (e.kind === "latency") {
+        pending[e.stage] = e.seconds;
+        if (e.stage === "tts") {
+          const t = (pending.end_of_turn || 0) + (pending.llm || 0) + (pending.tts || 0);
+          blocks.push(h("div", { class: "muted", style: "text-align:right" }, `response ${t.toFixed(2)}s`));
+          pending = {};
+        }
+      } else if (e.kind === "end") {
+        blocks.push(h("div", { class: "muted", style: "text-align:center" }, "Call ended"));
+      }
+    }
+    detail.replaceChildren(h("h2", {}, fmt(events[0].t)),
+      h("div", { class: "transcript", style: "height:auto;max-height:68vh" }, blocks));
+  }
+
+  list.replaceChildren(...(calls.length === 0
+    ? [h("p", { class: "muted" }, "No calls yet. Start one from Test call; it will appear here.")]
+    : calls.map((c) => h("button", { class: "btn", style: "text-align:left", onclick: () => open(c.id) },
+      h("strong", {}, fmt(c.started)), h("div", { class: "muted" },
+        `${c.messages} messages. ${c.preview ? "“" + c.preview.slice(0, 60) + "”" : ""}`)))));
+  main().replaceChildren(
+    ...pageHeader("Call history", "Every voice call, with what was said, what the agent did, and how fast it answered. Use it to find where the agent sounds off."),
+    h("div", { class: "console", style: "grid-template-columns:minmax(260px,1fr) minmax(0,2fr)" }, list, detail));
 }
 
 /* ---------- appointments ---------- */

@@ -21,6 +21,6 @@ departments:
 agent:
   llm_model: ''
   tts_model: ''
-  tts_voice_id: ''
+  tts_voice_id: EXAVITQu4vr4xnSDxMaL
   greeting: ''
   extra_instructions: ''

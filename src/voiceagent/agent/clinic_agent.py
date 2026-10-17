@@ -38,7 +38,9 @@ class ClinicAgent(Agent):
         store: AppointmentStore,
         notifier: StaffNotifier,
         on_event: Callable[[dict], None] | None = None,
+        on_hangup: Callable[[], None] | None = None,
     ) -> None:
+        self._on_hangup = on_hangup or (lambda: None)
         self._on_event = on_event or (lambda event: None)
         self._config = config
         self._store = store
@@ -130,12 +132,12 @@ class ClinicAgent(Agent):
 
     @function_tool
     @reported
-    async def end_call(self, context: RunContext) -> str:
+    async def end_call(self, context: RunContext) -> None:
         """Görüşmeyi bitirir. Arayan başka bir isteği olmadığını söylediğinde,
         önce veda cümleni söyle, sonra bu aracı çağır."""
-        await context.wait_for_playout()
-        context.session.shutdown(drain=True)
-        return "Görüşme sonlandırıldı."
+        await context.wait_for_playout()  # let the goodbye finish
+        self._on_hangup()
+        # Returning nothing tells the framework not to generate another reply.
 
     @function_tool
     @reported

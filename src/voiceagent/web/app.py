@@ -66,6 +66,13 @@ async def health() -> dict:
 # ---------- config & knowledge ----------
 
 
+@app.get("/api/defaults")
+def get_defaults() -> dict:
+    from voiceagent.agent.prompts import DEFAULT_STYLE_GUIDE
+
+    return {"style_guide": DEFAULT_STYLE_GUIDE}
+
+
 @app.get("/api/config")
 def get_config() -> dict:
     config, _ = load_clinic(CLINIC_DIR)
@@ -125,6 +132,42 @@ def list_handoffs() -> list[dict]:
         return []
     lines = path.read_text(encoding="utf-8").splitlines()
     return [json.loads(line) for line in reversed(lines) if line.strip()]
+
+
+# ---------- call history ----------
+
+
+def _read_call(path: Path) -> list[dict]:
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+
+
+@app.get("/api/calls")
+def list_calls() -> list[dict]:
+    directory = Path(settings.calls_dir)
+    if not directory.exists():
+        return []
+    calls = []
+    for path in sorted(directory.glob("*.jsonl"), reverse=True):
+        events = _read_call(path)
+        messages = [e for e in events if e["kind"] == "message"]
+        calls.append(
+            {
+                "id": path.stem,
+                "started": events[0]["t"] if events else "",
+                "messages": len(messages),
+                "preview": next((m["text"] for m in messages if m["role"] == "user"), ""),
+                "ended": any(e["kind"] == "end" for e in events),
+            }
+        )
+    return calls
+
+
+@app.get("/api/calls/{call_id}")
+def get_call(call_id: str) -> list[dict]:
+    path = Path(settings.calls_dir) / f"{Path(call_id).name}.jsonl"  # .name blocks path traversal
+    if not path.exists():
+        raise HTTPException(404, "Call not found")
+    return _read_call(path)
 
 
 # ---------- ElevenLabs voices ----------

@@ -15,3 +15,4 @@ data/*.log
 data/handoffs.jsonl
 data/logs/
 data/*.db
+data/calls/

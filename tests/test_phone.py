@@ -20,7 +20,14 @@ def test_landline_accepted():
     assert normalize_phone("0216 123 45 67") == "02161234567"
 
 
-def test_speech_groups():
+def test_speech_is_natural_turkish_numbers():
     assert phone_to_speech("05540219870") == (
-        "sıfır beş beş dört, sıfır iki bir, dokuz sekiz, yedi sıfır"
+        "sıfır beş yüz elli dört, sıfır yirmi bir, doksan sekiz, yetmiş"
     )
+
+
+def test_speech_handles_zeros_and_round_numbers():
+    assert phone_to_speech("05320000000") == (
+        "sıfır beş yüz otuz iki, sıfır sıfır sıfır, sıfır sıfır, sıfır sıfır"
+    )
+    assert phone_to_speech("02161000105") == "sıfır iki yüz on altı, yüz, sıfır bir, sıfır beş"

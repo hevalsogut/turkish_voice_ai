@@ -2,7 +2,8 @@
 
 import re
 
-_DIGIT_WORDS = ["sıfır", "bir", "iki", "üç", "dört", "beş", "altı", "yedi", "sekiz", "dokuz"]
+_ONES = ["", "bir", "iki", "üç", "dört", "beş", "altı", "yedi", "sekiz", "dokuz"]
+_TENS = ["", "on", "yirmi", "otuz", "kırk", "elli", "altmış", "yetmiş", "seksen", "doksan"]
 
 
 def normalize_phone(raw: str) -> str | None:
@@ -19,7 +20,33 @@ def normalize_phone(raw: str) -> str | None:
     return None
 
 
+def _number_words(n: int) -> str:
+    """0-999 in Turkish words: 554 -> 'beş yüz elli dört', 70 -> 'yetmiş'."""
+    hundreds, rest = divmod(n, 100)
+    tens, ones = divmod(rest, 10)
+    parts = []
+    if hundreds:
+        parts.append(("" if hundreds == 1 else _ONES[hundreds] + " ") + "yüz")
+    if tens:
+        parts.append(_TENS[tens])
+    if ones:
+        parts.append(_ONES[ones])
+    return " ".join(parts) or "sıfır"
+
+
+def _group_words(group: str) -> str:
+    """Speak a digit group as a number, leading zeros one by one: '021' -> 'sıfır yirmi bir'."""
+    stripped = group.lstrip("0")
+    zeros = ["sıfır"] * (len(group) - len(stripped))
+    if not stripped:
+        return " ".join(zeros)
+    return " ".join([*zeros, _number_words(int(stripped))])
+
+
 def phone_to_speech(phone: str) -> str:
-    """'05540219870' -> 'sıfır beş beş dört, sıfır iki bir, dokuz sekiz, yedi sıfır'."""
-    groups = [phone[:4], phone[4:7], phone[7:9], phone[9:11]]
-    return ", ".join(" ".join(_DIGIT_WORDS[int(d)] for d in g) for g in groups)
+    """The way Turks read numbers aloud:
+    '05540219870' -> 'sıfır beş yüz elli dört, sıfır yirmi bir, doksan sekiz, yetmiş'.
+    """
+    groups = [phone[1:4], phone[4:7], phone[7:9], phone[9:11]]
+    first = "sıfır " + _group_words(groups[0])
+    return ", ".join([first, *(_group_words(g) for g in groups[1:])])

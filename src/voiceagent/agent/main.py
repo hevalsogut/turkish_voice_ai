@@ -5,6 +5,7 @@ Run as a worker (dashboard / phone):  python -m voiceagent.agent.main dev
 The clinic config is re-read for every call, so dashboard edits apply to the next call.
 """
 
+import asyncio
 import json
 import logging
 from datetime import datetime
@@ -17,6 +18,7 @@ from livekit.plugins import silero
 from voiceagent.agent.clinic_agent import ClinicAgent
 from voiceagent.agent.factory import build_llm, build_stt, build_tts
 from voiceagent.agent.prompts import greeting_instruction
+from voiceagent.agent.recorder import CallRecorder
 from voiceagent.clinic.handoff import JsonlNotifier
 from voiceagent.clinic.loader import load_clinic
 from voiceagent.clinic.sqlite_store import SqliteAppointmentStore
@@ -39,10 +41,11 @@ async def entrypoint(ctx: JobContext) -> None:
         vad=silero.VAD.load(),
     )
 
-    def publish(event: dict) -> None:
-        """Send a live event to the dashboard (browser) over the room's data channel."""
-        import asyncio
+    recorder = CallRecorder(Path(settings.calls_dir), ctx.room.name)
 
+    def publish(event: dict) -> None:
+        """Send a live event to the dashboard and record it in the call history."""
+        recorder.add(event["type"], **{k: v for k, v in event.items() if k != "type"})
         payload = json.dumps(event, ensure_ascii=False).encode("utf-8")
         asyncio.ensure_future(
             ctx.room.local_participant.publish_data(payload, reliable=True, topic="agent-events")
@@ -63,15 +66,26 @@ async def entrypoint(ctx: JobContext) -> None:
             latency_log.info("LATENCY tts_first_audio=%.2fs", m.ttfb)
             publish({"type": "latency", "stage": "tts", "seconds": m.ttfb})
 
+    @session.on("conversation_item_added")
+    def _on_item(ev) -> None:
+        item = ev.item
+        if item.type == "message" and item.text_content:
+            recorder.add("message", role=item.role, text=item.text_content)
+
+    @session.on("close")
+    def _on_close(ev) -> None:
+        recorder.add("end")
+
     agent = ClinicAgent(
         config=config,
         knowledge=knowledge,
         store=store,
         notifier=JsonlNotifier(Path(settings.handoff_path)),
         on_event=publish,
+        on_hangup=lambda: asyncio.ensure_future(ctx.delete_room()),
     )
     await session.start(room=ctx.room, agent=agent)
-    await session.generate_reply(instructions=greeting_instruction(config))
+    await session.generate_reply(instructions=greeting_instruction(config, datetime.now(tz)))
 
 
 if __name__ == "__main__":

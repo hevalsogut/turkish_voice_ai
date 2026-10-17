@@ -44,7 +44,7 @@ python -m voiceagent.agent.main console   # speak through your Mac's mic and spe
 - Phone numbers are validated and read back by code (`clinic/phone.py`), never by the LLM.
 - Latency (measured from this machine): ElevenLabs flash first audio ~0.26s, LLM first token ~0.6s,
   plus ~0.3-0.5s end-of-turn detection. Per-turn timings are logged as `LATENCY ...`.
-- `gpt-4o-mini` booked the wrong slot in testing, hence the `gpt-4.1-mini` default.
+- `gpt-4o-mini` booked the wrong slot in testing, `gpt-4.1` is the default: it understands "ona doğru" (around ten) correctly where `gpt-4.1-mini` picked nine, at the same latency.
 - Console logs (`data/console.log`) contain call transcripts and are git-ignored.
 
 ## Dashboard (configure + test)

@@ -10,6 +10,7 @@ class AgentSettings(BaseModel):
     tts_model: str = ""
     tts_voice_id: str = ""
     greeting: str = ""
+    style_guide: str = ""  # empty = built-in default (see agent/prompts.py)
     extra_instructions: str = ""
 
 

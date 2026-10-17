@@ -14,13 +14,14 @@ class Settings(BaseSettings):
 
     # Live agent: which vendor/model each stage uses (swap here, not in agent code)
     stt_provider: str = "deepgram"
-    llm_model: str = "gpt-4.1-mini"
+    llm_model: str = "gpt-4.1"
     tts_model: str = "eleven_flash_v2_5"
     tts_voice_id: str = ""
 
     clinic_dir: str = "data/clinics/demo"
     handoff_path: str = "data/handoffs.jsonl"
     db_path: str = "data/app.db"
+    calls_dir: str = "data/calls"
 
     # Local LiveKit server (`livekit-server --dev`) defaults; override for LiveKit Cloud
     livekit_url: str = "ws://127.0.0.1:7880"

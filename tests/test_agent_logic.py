@@ -30,3 +30,22 @@ async def test_jsonl_notifier_appends(tmp_path):
     await notifier.notify(msg)
     lines = path.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 2 and json.loads(lines[0])["tenant_id"] == "t1"
+
+
+def test_style_guide_default_and_override():
+    config, knowledge = load_clinic(Path("data/clinics/demo"))
+    now = datetime(2026, 10, 17, 14, 0, tzinfo=ZoneInfo(config.timezone))
+    assert "resepsiyonistsin" in build_system_prompt(config, knowledge, now)
+    config.agent.style_guide = "ÖZEL ÜSLUP {agent_name}"
+    prompt = build_system_prompt(config, knowledge, now)
+    assert f"ÖZEL ÜSLUP {config.agent_name}" in prompt
+    assert "resepsiyonistsin" not in prompt
+
+
+def test_greeting_matches_time_of_day():
+    from voiceagent.agent.prompts import greeting_instruction
+
+    config, _ = load_clinic(Path("data/clinics/demo"))
+    tz = ZoneInfo(config.timezone)
+    assert "Günaydın" in greeting_instruction(config, datetime(2026, 10, 17, 9, tzinfo=tz))
+    assert "İyi akşamlar" in greeting_instruction(config, datetime(2026, 10, 17, 20, tzinfo=tz))
